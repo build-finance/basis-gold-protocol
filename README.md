@@ -30,7 +30,7 @@ Basis Gold differs from the original Basis Project in several meaningful ways:
 
 There exists three types of assets in the Basis Gold system. 
 
-- **Basis Gold ($BSG)**: a stablecoin, which the protocol aims to keep value-pegged to 1 US Dollar. 
+- **Basis Gold ($BSG)**: a stablecoin, which the protocol aims to keep value-pegged the price of gold.
 - **Basis Gold Bonds ($BSGB)**: IOUs issued by the system to buy back Basis Gold when price($BSG) < realGoldPrice. Bonds are sold at a meaningful discount to price($BSG), and redeemed at realGoldPrice when price($BSG) normalizes to realGoldPrice. 
 - **Basis Gold Shares ($BSGS)**: receives surplus seigniorage (seigniorage left remaining after all the bonds have been redeemed).
 
