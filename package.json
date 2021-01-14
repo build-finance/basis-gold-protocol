@@ -9,7 +9,7 @@
     "test": "hardhat test",
     "compile": "hardhat compile",
     "coverage": "hardhat coverage",
-    "verify": "truffle run verify Boardroom Bond Distributor Gold Oracle Share SimpleERCFund Timelock Treasury BSGBACPool BSGBUILDETHPool BSGDAIPool BSGDSDPool BSGESDPool BSGSXAUPool DAIBSGLPTokenSharePool DAIBSGSLPTokenSharePool --network mainnet",
+    "verify": "truffle run verify InitialShareDistributor InitialGoldDistributor Boardroom Bond Distributor Gold Oracle Share SimpleERCFund Timelock Treasury BSGBACPool BSGBUILDETHPool BSGDAIPool BSGDSDPool BSGESDPool BSGSXAUPool DAIBSGLPTokenSharePool DAIBSGSLPTokenSharePool --network mainnet",
     "flatten": "truffle-flattener",
     "console:dev": "truffle console --network dev",
     "deploy:dev": "truffle migrate --reset --network dev",
