@@ -6,6 +6,13 @@
 
 Basis Gold is a lightweight implementation of the [Basis Protocol](basis.io) on Ethereum. 
 
+## Addresses
+
+- BSG: `0xB34Ab2f65c6e4F764fFe740ab83F982021Faed6d`
+- BSGS: `0xA9d232cC381715aE791417B624D7C4509D2c28DB`
+- BSGB: `0x940c7ccD1456b29A6F209B641fB0edAa96a15C2D`
+- BUILD: `0x6e36556b3ee5aa28def2a8ec3dae30ec2b208739`
+
 ## History of Basis 
 
 Basis is an algorithmic stablecoin protocol where the money supply is dynamically adjusted to meet changes in money demand.  
