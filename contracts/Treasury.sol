@@ -95,7 +95,7 @@ contract Treasury is ContractGuard, Epoch {
     }
 
     function getGoldPrice() public view returns (uint256) {
-        try goldOracle.price0Last() returns (uint256 price) {
+        try goldOracle.price1Last() returns (uint256 price) {
             return price;
         } catch {
             revert('Treasury: failed to consult gold price from the oracle');
@@ -175,7 +175,7 @@ contract Treasury is ContractGuard, Epoch {
             goldPrice < goldOracle.goldPriceOne(),
             'Treasury: goldPrice not eligible for bond purchase'
         );
-        
+
         uint256 priceRatio = goldPrice.mul(1e18).div(goldOracle.goldPriceOne());
         IBasisAsset(gold).burnFrom(msg.sender, amount);
         IBasisAsset(bond).mint(msg.sender, amount.mul(1e18).div(priceRatio));
