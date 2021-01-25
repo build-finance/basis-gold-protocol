@@ -74,7 +74,7 @@ async function migration(deployer, network, accounts) {
   const linkOracle = network !== 'mainnet'
     ? await deployer.deploy(MockLinkOracle)
     : await MockLinkOracle.at(knownContracts.LINK_ORACLE[network]);
-  
+
   await deployer.deploy(
     Oracle,
     uniswap.address,

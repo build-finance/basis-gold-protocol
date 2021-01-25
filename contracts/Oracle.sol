@@ -16,7 +16,7 @@ import './interfaces/ILinkOracle.sol';
 contract Oracle is Epoch {
 
     event Updated(uint256 price0CumulativeLast, uint256 price1CumulativeLast);
-    
+
     using FixedPoint for *;
     using SafeMath for uint256;
 
@@ -51,7 +51,7 @@ contract Oracle is Epoch {
         priceData.token1 = pair.token1();
         priceData.price0CumulativeLast = pair.price0CumulativeLast();
         priceData.price1CumulativeLast = pair.price1CumulativeLast();
-        
+
         uint reserve0;
         uint reserve1;
         (reserve0, reserve1, priceData.blockTimestampLast) = pair.getReserves();
