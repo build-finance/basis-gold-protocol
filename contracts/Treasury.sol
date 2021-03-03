@@ -35,6 +35,8 @@ contract Treasury is ContractGuard, Epoch {
     bool public initialized = false;
 
     // ========== CORE
+    address public devfund;
+    address public stablefund;
     address public fund;
     address public gold;
     address public bond;
@@ -45,7 +47,9 @@ contract Treasury is ContractGuard, Epoch {
 
     // ========== PARAMS
     uint256 private accumulatedSeigniorage = 0;
-    uint256 public fundAllocationRate = 2; // %
+    uint256 public fundAllocationRate = 2; // %Build FUND
+    uint256 public devfundAllocationRate = 2; // %BASIS GOLD DEV
+    uint256 public stablefundAllocationRate = 50; // %STABLIZATION
 
     /* ========== CONSTRUCTOR ========== */
 
@@ -56,6 +60,8 @@ contract Treasury is ContractGuard, Epoch {
         IOracle _goldOracle,
         address _boardroom,
         address _fund,
+        address _devfund,
+        address _stablefund,
         uint256 _startTime
     ) public Epoch(8 hours, _startTime, 0) {
         gold = _gold;
@@ -65,6 +71,8 @@ contract Treasury is ContractGuard, Epoch {
 
         boardroom = _boardroom;
         fund = _fund;
+        devfund = _devfund;
+        stablefund = _stablefund;
     }
 
     /* =================== Modifier =================== */
@@ -152,6 +160,26 @@ contract Treasury is ContractGuard, Epoch {
         fundAllocationRate = rate;
         emit ContributionPoolRateChanged(msg.sender, rate);
     }
+    
+    function setDevFund(address newFund) public onlyOperator {
+        devfund = newFund;
+        emit DevFundChanged(msg.sender, newFund);
+    }
+
+    function setDevFundAllocationRate(uint256 rate) public onlyOperator {
+        devfundAllocationRate = rate;
+        emit DevFundRateChanged(msg.sender, rate);
+    }
+
+    function setStableFund(address newFund) public onlyOperator {
+        stablefund = newFund;
+        emit StableFundChanged(msg.sender, newFund);
+    }
+
+    function setStableFundAllocationRate(uint256 rate) public onlyOperator {
+        stablefundAllocationRate = rate;
+        emit StableFundRateChanged(msg.sender, rate);
+    }
 
     /* ========== MUTABLE FUNCTIONS ========== */
 
@@ -237,7 +265,7 @@ contract Treasury is ContractGuard, Epoch {
         uint256 seigniorage = goldSupply.mul(percentage).div(1e18);
         IBasisAsset(gold).mint(address(this), seigniorage);
 
-        // ======================== BIP-3
+        // ======================== BIP-3 BUILD FUND
         uint256 fundReserve = seigniorage.mul(fundAllocationRate).div(100);
         if (fundReserve > 0) {
             IERC20(gold).safeApprove(fund, fundReserve);
@@ -250,6 +278,21 @@ contract Treasury is ContractGuard, Epoch {
         }
 
         seigniorage = seigniorage.sub(fundReserve);
+        
+        // ======================= BIP-1 DEV FUND
+              uint256 devfundReserve =
+            seigniorage.mul(devfundAllocationRate).div(100);
+        if (devfundReserve > 0) {
+            IERC20(kbtc).safeApprove(devfund, devfundReserve);
+            ISimpleERCFund(devfund).deposit(
+                kbtc,
+                devfundReserve,
+                'Treasury: Seigniorage Allocation'
+            );
+            emit DevFundFunded(now, devfundReserve);
+        }
+
+        seigniorage = seigniorage.sub(devfundReserve);
 
         // ======================== BIP-4
         uint256 treasuryReserve = Math.min(
@@ -263,8 +306,19 @@ contract Treasury is ContractGuard, Epoch {
             emit TreasuryFunded(now, treasuryReserve);
         }
 
+        seigniorage = seigniorage.sub(treasuryReserve);
+        
+        // ======================== BIP-1 STAB FUND
+        uint256 stablefundReserve =
+            seigniorage.mul(stablefundAllocationRate).div(100);
+        if (stablefundReserve > 0) {
+            IERC20(kbtc).safeTransfer(stablefund, stablefundReserve);
+            emit StableFundFunded(now, stablefundReserve);
+        }
+        seigniorage = seigniorage.sub(stablefundReserve);
+        
         // boardroom
-        uint256 boardroomReserve = seigniorage.sub(treasuryReserve);
+        uint256 boardroomReserve = seigniorage;
         if (boardroomReserve > 0) {
             IERC20(gold).safeApprove(boardroom, boardroomReserve);
             IBoardroom(boardroom).allocateSeigniorage(boardroomReserve);
@@ -280,6 +334,10 @@ contract Treasury is ContractGuard, Epoch {
         address indexed operator,
         uint256 newRate
     );
+    event DevFundChanged(address indexed operator, address newFund);
+    event DevFundRateChanged(address indexed operator, uint256 newRate);
+    event StableFundChanged(address indexed operator, address newFund);
+    event StableFundRateChanged(address indexed operator, uint256 newRate);
 
     // CORE
     event RedeemedBonds(address indexed from, uint256 amount);
@@ -287,4 +345,6 @@ contract Treasury is ContractGuard, Epoch {
     event TreasuryFunded(uint256 timestamp, uint256 seigniorage);
     event BoardroomFunded(uint256 timestamp, uint256 seigniorage);
     event ContributionPoolFunded(uint256 timestamp, uint256 seigniorage);
+    event DevFundFunded(uint256 timestamp, uint256 seigniorage);
+    event StableFundFunded(uint256 timestamp, uint256 seigniorage);
 }
