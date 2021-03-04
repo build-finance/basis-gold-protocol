@@ -26,8 +26,7 @@ contract StableFund is Operator {
         address _router,
         address _trader,
         IOracle _goldOracle,
-        uint256 _goldBuyBackPercent
-        
+        uint256 _goldBuyBackPercent      
     ) public {
         pair = IUniswapV2Pair(
             UniswapV2Library.pairFor(_factory, _tokenA, _tokenB)
@@ -37,7 +36,7 @@ contract StableFund is Operator {
         router = IUniswapV2Router02(_router);
         trader = _trader;
         goldOracle = _goldOracle;
-        goldBuyBackPercent = _goldBuyBackPercent
+        goldBuyBackPercent = _goldBuyBackPercent;
     }
 
     modifier onlyAllowedTokens(address[] calldata path) {
@@ -105,7 +104,6 @@ contract StableFund is Operator {
         
         emit StableFundBoughtBSG(msg.sender, numTokens);
     }
-
 
     function swapExactTokensForTokens(
         uint256 amountIn,
