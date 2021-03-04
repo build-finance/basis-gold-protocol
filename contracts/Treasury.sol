@@ -35,7 +35,6 @@ contract Treasury is ContractGuard, Epoch {
     bool public initialized = false;
 
     // ========== CORE
-    address public devfund;
     address public stablefund;
     address public fund;
     address public gold;
@@ -48,7 +47,6 @@ contract Treasury is ContractGuard, Epoch {
     // ========== PARAMS
     uint256 private accumulatedSeigniorage = 0;
     uint256 public fundAllocationRate = 2; // %Build FUND
-    uint256 public devfundAllocationRate = 2; // %BASIS GOLD DEV
     uint256 public stablefundAllocationRate = 50; // %STABLIZATION
 
     /* ========== CONSTRUCTOR ========== */
@@ -60,7 +58,6 @@ contract Treasury is ContractGuard, Epoch {
         IOracle _goldOracle,
         address _boardroom,
         address _fund,
-        address _devfund,
         address _stablefund,
         uint256 _startTime
     ) public Epoch(8 hours, _startTime, 0) {
@@ -68,10 +65,8 @@ contract Treasury is ContractGuard, Epoch {
         bond = _bond;
         share = _share;
         goldOracle = _goldOracle;
-
         boardroom = _boardroom;
         fund = _fund;
-        devfund = _devfund;
         stablefund = _stablefund;
     }
 
@@ -161,16 +156,6 @@ contract Treasury is ContractGuard, Epoch {
         emit ContributionPoolRateChanged(msg.sender, rate);
     }
     
-    function setDevFund(address newFund) public onlyOperator {
-        devfund = newFund;
-        emit DevFundChanged(msg.sender, newFund);
-    }
-
-    function setDevFundAllocationRate(uint256 rate) public onlyOperator {
-        devfundAllocationRate = rate;
-        emit DevFundRateChanged(msg.sender, rate);
-    }
-
     function setStableFund(address newFund) public onlyOperator {
         stablefund = newFund;
         emit StableFundChanged(msg.sender, newFund);
@@ -266,7 +251,7 @@ contract Treasury is ContractGuard, Epoch {
         IBasisAsset(gold).mint(address(this), seigniorage);
 
         // ======================== BIP-3 BUILD FUND
-        uint256 fundReserve = seigniorage.mul(fundAllocationRate).div(100);
+        uint256 fundReserve = seigniorage.mul(fundAllocationRate).div(100);   
         if (fundReserve > 0) {
             IERC20(gold).safeApprove(fund, fundReserve);
             ISimpleERCFund(fund).deposit(
@@ -276,24 +261,22 @@ contract Treasury is ContractGuard, Epoch {
             );
             emit ContributionPoolFunded(now, fundReserve);
         }
-
         seigniorage = seigniorage.sub(fundReserve);
         
-        // ======================= BIP-1 DEV FUND
-              uint256 devfundReserve =
-            seigniorage.mul(devfundAllocationRate).div(100);
-        if (devfundReserve > 0) {
-            IERC20(kbtc).safeApprove(devfund, devfundReserve);
-            ISimpleERCFund(devfund).deposit(
-                kbtc,
-                devfundReserve,
-                'Treasury: Seigniorage Allocation'
+        // ======================== BIP-1 STAB FUND
+        uint256 stablefundReserve =
+            seigniorage.mul(stablefundAllocationRate).div(100);
+        if (stablefundReserve > 0) {
+            IERC20(gold).safeApprove(stablefund, stablefundReserve);
+            ISimpleERCFund(stablefund).deposit(
+                gold,
+                stablefundReserve,
+                'StableFund: Seigniorage Allocation'
             );
-            emit DevFundFunded(now, devfundReserve);
+            emit StableFundFunded(now, stablefundReserve);
         }
-
-        seigniorage = seigniorage.sub(devfundReserve);
-
+        seigniorage = seigniorage.sub(stablefundReserve);
+        
         // ======================== BIP-4
         uint256 treasuryReserve = Math.min(
             seigniorage,
@@ -307,16 +290,7 @@ contract Treasury is ContractGuard, Epoch {
         }
 
         seigniorage = seigniorage.sub(treasuryReserve);
-        
-        // ======================== BIP-1 STAB FUND
-        uint256 stablefundReserve =
-            seigniorage.mul(stablefundAllocationRate).div(100);
-        if (stablefundReserve > 0) {
-            IERC20(kbtc).safeTransfer(stablefund, stablefundReserve);
-            emit StableFundFunded(now, stablefundReserve);
-        }
-        seigniorage = seigniorage.sub(stablefundReserve);
-        
+          
         // boardroom
         uint256 boardroomReserve = seigniorage;
         if (boardroomReserve > 0) {
@@ -334,8 +308,6 @@ contract Treasury is ContractGuard, Epoch {
         address indexed operator,
         uint256 newRate
     );
-    event DevFundChanged(address indexed operator, address newFund);
-    event DevFundRateChanged(address indexed operator, uint256 newRate);
     event StableFundChanged(address indexed operator, address newFund);
     event StableFundRateChanged(address indexed operator, uint256 newRate);
 
@@ -345,6 +317,5 @@ contract Treasury is ContractGuard, Epoch {
     event TreasuryFunded(uint256 timestamp, uint256 seigniorage);
     event BoardroomFunded(uint256 timestamp, uint256 seigniorage);
     event ContributionPoolFunded(uint256 timestamp, uint256 seigniorage);
-    event DevFundFunded(uint256 timestamp, uint256 seigniorage);
     event StableFundFunded(uint256 timestamp, uint256 seigniorage);
 }
