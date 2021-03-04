@@ -17,6 +17,7 @@ contract StableFund is Operator {
     address public trader;
     bool public migrated = false;
     IOracle public goldOracle;
+    uint256 public goldBuyBackPercent; //90%
     
     constructor(
         address _tokenA,  //DAI
@@ -24,7 +25,9 @@ contract StableFund is Operator {
         address _factory,
         address _router,
         address _trader,
-        IOracle _goldOracle
+        IOracle _goldOracle,
+        uint256 _goldBuyBackPercent
+        
     ) public {
         pair = IUniswapV2Pair(
             UniswapV2Library.pairFor(_factory, _tokenA, _tokenB)
@@ -34,6 +37,7 @@ contract StableFund is Operator {
         router = IUniswapV2Router02(_router);
         trader = _trader;
         goldOracle = _goldOracle;
+        goldBuyBackPercent = _goldBuyBackPercent
     }
 
     modifier onlyAllowedTokens(address[] calldata path) {
@@ -68,7 +72,7 @@ contract StableFund is Operator {
 
     // set to 90% of goldOracle Price
     function goldPriceCeiling() public view returns(uint256) {
-        return goldOracle.goldPriceOne().mul(uint256(90)).div(100);
+        return goldOracle.goldPriceOne().mul(uint256(goldBuyBackPercent)).div(100);
     }
     
     function approve(address delegate, uint256 numTokens) public override returns (bool) {
@@ -77,12 +81,7 @@ contract StableFund is Operator {
         return true;
     }
 
-    function buyBSGUnderPeg(uint256 numTokens)
-        external
-        onlyOneBlock
-        checkMigration
-        checkStartTime
-        checkOperator
+    function buyBSGUnderPeg(uint256 numTokens) 
     {
         require(numTokens > 0, 'Stable FUnd: cannot purchase BSG with zero amount');
 
@@ -98,7 +97,7 @@ contract StableFund is Operator {
             'StableFund: Not enough DAI for buy'
         );
    
-        //Outside my capabilities here to calculate the amount of DAI that needs to be transfered back 
+        //Outside my capabilities here lets make sure we test the math...
         uint256 allowance = tokenB.allowance(msg.sender, address(this));
         require(allowance >= numTokens, "Check the token allowance");
         tokenB.transferFrom(msg.sender, address(this), numTokens);
