@@ -10,6 +10,10 @@ import './lib/UniswapV2Library.sol';
 import './owner/Operator.sol';
 
 contract StableFund is Operator {
+    using SafeERC20 for IERC20;
+    using Address for address;
+    using SafeMath for uint256;
+    
     IUniswapV2Pair public pair;
     IERC20 public tokenA;
     IERC20 public tokenB;
@@ -18,6 +22,7 @@ contract StableFund is Operator {
     bool public migrated = false;
     IOracle public goldOracle;
     uint256 public goldBuyBackPercent; //90%
+    mapping(address => mapping (address => uint256)) allowed;
     
     constructor(
         address _tokenA,  //DAI
@@ -26,7 +31,8 @@ contract StableFund is Operator {
         address _router,
         address _trader,
         IOracle _goldOracle,
-        uint256 _goldBuyBackPercent      
+        uint256 _goldBuyBackPercent
+        
     ) public {
         pair = IUniswapV2Pair(
             UniswapV2Library.pairFor(_factory, _tokenA, _tokenB)
@@ -74,13 +80,13 @@ contract StableFund is Operator {
         return goldOracle.goldPriceOne().mul(uint256(goldBuyBackPercent)).div(100);
     }
     
-    function approve(address delegate, uint256 numTokens) public override returns (bool) {
+    function approveSeller(address delegate, uint256 numTokens) public returns (bool) {
         allowed[msg.sender][delegate] = numTokens;
         emit Approval(msg.sender, delegate, numTokens);
         return true;
     }
 
-    function buyBSGUnderPeg(uint256 numTokens) 
+    function buyBSGUnderPeg(uint256 numTokens) public 
     {
         require(numTokens > 0, 'Stable FUnd: cannot purchase BSG with zero amount');
 
@@ -100,10 +106,11 @@ contract StableFund is Operator {
         uint256 allowance = tokenB.allowance(msg.sender, address(this));
         require(allowance >= numTokens, "Check the token allowance");
         tokenB.transferFrom(msg.sender, address(this), numTokens);
-        tokenA.transferFrom(address(this), msg.sender, numTokens.mul(goldPriceCeiling()).div(goldOracle.price0Current()));
+        tokenA.transferFrom(address(this), msg.sender, numTokens.mul(goldPriceCeiling()).div(goldOracle.price0Last()));
         
         emit StableFundBoughtBSG(msg.sender, numTokens);
     }
+
 
     function swapExactTokensForTokens(
         uint256 amountIn,
@@ -177,4 +184,5 @@ contract StableFund is Operator {
 
     event Migration(address indexed target);
     event StableFundBoughtBSG(address indexed from, uint256 amount);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 }
