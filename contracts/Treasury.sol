@@ -68,6 +68,7 @@ contract Treasury is ContractGuard, Epoch {
         boardroom = _boardroom;
         fund = _fund;
         stablefund = _stablefund;
+        
     }
 
     /* =================== Modifier =================== */
