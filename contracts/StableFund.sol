@@ -1,15 +1,17 @@
-pragma solidity ^0.6.0;
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.6.0;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
 import './interfaces/IOracle.sol';
+import 'hardhat/console.sol';
 import './interfaces/IUniswapV2Pair.sol';
 import './interfaces/IUniswapV2Router02.sol';
 
 import './lib/UniswapV2Library.sol';
 import './owner/Operator.sol';
 
-contract StableFund is Operator {
+contract StableFund is Ownable, Operator {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -21,8 +23,8 @@ contract StableFund is Operator {
     IUniswapV2Router02 public router;
     bool public migrated = false;
     IOracle public goldOracle;
-    uint256 public goldBuyPercentage; //90%
-    uint256 public goldSellPercentage; //105%
+    uint256 public goldBuyPercentage = 90e18; //90%
+    uint256 public goldSellPercentage = 105e18; //105%
     mapping(address => mapping (address => uint256)) allowed;
     
     constructor(
@@ -64,26 +66,25 @@ contract StableFund is Operator {
 
     // set to 90% of goldOracle Price
     function goldPriceCeiling() internal view returns(uint256) {
-        return goldOracle.goldPriceOne().mul(uint256(goldBuyPercentage)).div(100);
+        uint256 tReturn = goldOracle.goldPriceOne().mul(uint256(goldBuyPercentage)).div(100);
+        //console.log("Price Ceiling: ", tReturn);
+        return tReturn;
     }
 
     function goldPriceFloor() internal view returns(uint256) {
-        return goldOracle.goldPriceOne().mul(uint256(goldSellPercentage)).div(100);
+        uint256 tReturn = goldOracle.goldPriceOne().mul(uint256(goldSellPercentage)).div(100);
+        //console.log("Price Floor: ", tReturn);
+        return tReturn;
     }
 
-    //Selling Functions - Seller must be approved before calling sellBSGtoStableFund
-    
-    function approveSeller(address delegate, uint256 numTokens) public returns (bool) {
-        allowed[msg.sender][delegate] = numTokens;
-        emit Approval(msg.sender, delegate, numTokens);
-        return true;
-    }
+    //Selling Functions
 
     function sellBSGtoStableFund(uint256 numTokens) public checkMigration
     {
         require(numTokens > 0, 'Stable FUnd: cannot purchase BSG with zero amount');
 
         uint256 goldPrice = getGoldPrice();
+        //console.log("GoldPrice: ", goldPrice);
     
         require(
             goldPrice < goldPriceCeiling(),
@@ -94,12 +95,13 @@ contract StableFund is Operator {
             numTokens.mul(goldPriceCeiling()) < IERC20(dai).balanceOf(address(this)),
             'StableFund: Not enough DAI for buy'
         );
-   
+        //console.log("DAI needed: ", numTokens.mul(goldPriceCeiling()));
+        //console.log("DAI Balance: ", IERC20(dai).balanceOf(address(this)));
+
         //Outside my capabilities here lets make sure we test the math...
-        uint256 allowance = bsg.allowance(msg.sender, address(this));
-        require(allowance >= numTokens, "Check the token allowance - Call approveSeller");
         bsg.transferFrom(msg.sender, address(this), numTokens);
-        dai.transferFrom(address(this), msg.sender, numTokens.mul(goldPriceCeiling()).div(goldOracle.price0Last()));
+        //console.log("Transfering: ", numTokens.mul(goldPriceCeiling()).div(goldOracle.price0Last()));
+        dai.transfer(msg.sender, numTokens.mul(goldPriceCeiling()).div(goldOracle.price0Last()));
         
         emit StableFundBoughtBSG(msg.sender, numTokens);
     }
@@ -145,6 +147,7 @@ contract StableFund is Operator {
 
         uint deadline = block.timestamp + 30;
 
+        //only component that isnt testing in the testing harness.
         router.swapExactTokensForTokens(
             numTokens,
             0,
