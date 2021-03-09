@@ -1,9 +1,11 @@
-pragma solidity ^0.6.0;
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.6.0;
 
 import '@openzeppelin/contracts/math/Math.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
 import '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
+import 'hardhat/console.sol';
 
 import './interfaces/IOracle.sol';
 import './interfaces/IBoardroom.sol';
@@ -15,6 +17,7 @@ import './lib/Safe112.sol';
 import './owner/Operator.sol';
 import './utils/Epoch.sol';
 import './utils/ContractGuard.sol';
+
 
 /**
  * @title Basis Gold Treasury contract
@@ -251,6 +254,9 @@ contract Treasury is ContractGuard, Epoch {
         uint256 seigniorage = goldSupply.mul(percentage).div(1e18);
         IBasisAsset(gold).mint(address(this), seigniorage);
 
+        //console.log("Gold Supply: ", goldSupply);
+        //console.log("percentage: ", percentage);
+        //console.log("Seigniorage: ", seigniorage);
         // ======================== BIP-3 BUILD FUND
         uint256 fundReserve = seigniorage.mul(fundAllocationRate).div(100);   
         if (fundReserve > 0) {
@@ -260,22 +266,17 @@ contract Treasury is ContractGuard, Epoch {
                 fundReserve,
                 'Treasury: Seigniorage Allocation'
             );
-            emit ContributionPoolFunded(now, fundReserve);
         }
+        emit ContributionPoolFunded(now, fundReserve);
         seigniorage = seigniorage.sub(fundReserve);
         
         // ======================== BIP-1 STAB FUND
         uint256 stablefundReserve =
             seigniorage.mul(stablefundAllocationRate).div(100);
         if (stablefundReserve > 0) {
-            IERC20(gold).safeApprove(stablefund, stablefundReserve);
-            ISimpleERCFund(stablefund).deposit(
-                gold,
-                stablefundReserve,
-                'StableFund: Seigniorage Allocation'
-            );
-            emit StableFundFunded(now, stablefundReserve);
+            IERC20(gold).safeTransfer(stablefund, stablefundReserve);
         }
+        emit StableFundFunded(now, stablefundReserve);
         seigniorage = seigniorage.sub(stablefundReserve);
         
         // ======================== BIP-4
@@ -287,18 +288,22 @@ contract Treasury is ContractGuard, Epoch {
             accumulatedSeigniorage = accumulatedSeigniorage.add(
                 treasuryReserve
             );
-            emit TreasuryFunded(now, treasuryReserve);
         }
-
+        emit TreasuryFunded(now, treasuryReserve);
         seigniorage = seigniorage.sub(treasuryReserve);
           
         // boardroom
         uint256 boardroomReserve = seigniorage;
         if (boardroomReserve > 0) {
             IERC20(gold).safeApprove(boardroom, boardroomReserve);
-            IBoardroom(boardroom).allocateSeigniorage(boardroomReserve);
-            emit BoardroomFunded(now, boardroomReserve);
+            IBoardroom(boardroom).allocateSeigniorage(boardroomReserve);            
         }
+        emit BoardroomFunded(now, boardroomReserve);
+
+        //console.log("Contrib Pool: ", fundReserve);
+        //console.log("Stable Pool: ", stablefundReserve);
+        //console.log("Treasury: ", treasuryReserve);
+        //console.log("Boardroom: ", boardroomReserve);
     }
 
     // GOV
