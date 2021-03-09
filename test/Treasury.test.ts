@@ -8,13 +8,17 @@ import {
   utils,
   BigNumberish,
 } from 'ethers';
+import UniswapV2Factory from '@uniswap/v2-core/build/UniswapV2Factory.json';
+import UniswapV2Router from '@uniswap/v2-periphery/build/UniswapV2Router02.json';
 import { Provider } from '@ethersproject/providers';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
 
 import { advanceTimeAndBlock } from './shared/utilities';
 
+
 chai.use(solidity);
 
+const MINUTE = 60;
 const DAY = 86400;
 const ETH = utils.parseEther('1');
 const GOLD_PRICE_ONE = utils.parseEther('1850');
@@ -27,6 +31,28 @@ const INITIAL_BSGB_AMOUNT = utils.parseEther('50000');
 async function latestBlocktime(provider: Provider): Promise<number> {
   const { timestamp } = await provider.getBlock('latest');
   return timestamp;
+}
+
+async function addLiquidity(
+  provider: Provider,
+  operator: SignerWithAddress,
+  router: Contract,
+  tokenA: Contract,
+  tokenB: Contract,
+  amount: BigNumber
+): Promise<void> {
+  await router
+    .connect(operator)
+    .addLiquidity(
+      tokenA.address,
+      tokenB.address,
+      amount,
+      amount,
+      amount,
+      amount,
+      operator.address,
+      (await latestBlocktime(provider)) + 1800
+    );
 }
 
 function bigmin(a: BigNumber, b: BigNumber): BigNumber {
@@ -47,17 +73,30 @@ describe('Treasury', () => {
   let Bond: ContractFactory;
   let Gold: ContractFactory;
   let Share: ContractFactory;
+  let StableFund: ContractFactory;
   let Treasury: ContractFactory;
   let SimpleFund: ContractFactory;
+  let MockDAI: ContractFactory;
   let MockOracle: ContractFactory;
   let MockBoardroom: ContractFactory;
+    // uniswap
+    let Factory = new ContractFactory(
+      UniswapV2Factory.abi,
+      UniswapV2Factory.bytecode
+    );
+    let Router = new ContractFactory(
+      UniswapV2Router.abi,
+      UniswapV2Router.bytecode
+    );
 
   before('fetch contract factories', async () => {
     Bond = await ethers.getContractFactory('Bond');
     Gold = await ethers.getContractFactory('Gold');
     Share = await ethers.getContractFactory('Share');
+    MockDAI = await ethers.getContractFactory('MockDai')
     Treasury = await ethers.getContractFactory('Treasury');
     SimpleFund = await ethers.getContractFactory('SimpleERCFund');
+    StableFund = await ethers.getContractFactory('StableFund');
     MockOracle = await ethers.getContractFactory('MockOracle');
     MockBoardroom = await ethers.getContractFactory('MockBoardroom');
   });
@@ -65,22 +104,44 @@ describe('Treasury', () => {
   let bond: Contract;
   let gold: Contract;
   let share: Contract;
+  let mockdai: Contract;
   let oracle: Contract;
   let treasury: Contract;
   let boardroom: Contract;
   let fund: Contract;
-
+  let stablefund: Contract;
   let startTime: BigNumber;
+  let factory: Contract;
+  let router: Contract;
+
+  before('deploy uniswap', async () => {
+    factory = await Factory.connect(operator).deploy(operator.address);
+    router = await Router.connect(operator).deploy(
+      factory.address,
+      operator.address
+    );
+  });
 
   beforeEach('deploy contracts', async () => {
     gold = await Gold.connect(operator).deploy();
     bond = await Bond.connect(operator).deploy();
     share = await Share.connect(operator).deploy();
+    mockdai = await MockDAI.connect(operator).deploy();
     oracle = await MockOracle.connect(operator).deploy();
     boardroom = await MockBoardroom.connect(operator).deploy(gold.address);
     fund = await SimpleFund.connect(operator).deploy();
-
     startTime = BigNumber.from(await latestBlocktime(provider)).add(DAY);
+
+    stablefund = await StableFund.connect(operator).deploy(
+      mockdai.address,
+      gold.address,
+      factory.address,
+      router.address,
+      oracle.address,
+      90,
+      105
+    );
+
     treasury = await Treasury.connect(operator).deploy(
       gold.address,
       bond.address,
@@ -88,6 +149,7 @@ describe('Treasury', () => {
       oracle.address,
       boardroom.address,
       fund.address,
+      stablefund.address,
       startTime
     );
     await fund.connect(operator).transferOperator(treasury.address);
@@ -104,6 +166,7 @@ describe('Treasury', () => {
         oracle.address,
         boardroom.address,
         fund.address,
+        stablefund.address,
         await latestBlocktime(provider)
       );
 
@@ -193,23 +256,6 @@ describe('Treasury', () => {
         }
       });
 
-      describe('after migration', () => {
-        it('should fail if contract migrated', async () => {
-          for await (const contract of [gold, bond, share]) {
-            await contract
-              .connect(operator)
-              .transferOwnership(treasury.address);
-          }
-
-          await treasury.connect(operator).migrate(operator.address);
-          expect(await treasury.migrated()).to.be.true;
-
-          await expect(treasury.allocateSeigniorage()).to.revertedWith(
-            'Treasury: migrated'
-          );
-        });
-      });
-
       describe('before startTime', () => {
         it('should fail if not started yet', async () => {
           await expect(treasury.allocateSeigniorage()).to.revertedWith(
@@ -242,13 +288,18 @@ describe('Treasury', () => {
             .mul(await treasury.fundAllocationRate())
             .div(100);
 
+          const expectedStableFundReserve = expectedSeigniorage.sub(expectedFundReserve)
+            .mul(await treasury.stablefundAllocationRate())
+            .div(100);
+
           const expectedTreasuryReserve = bigmin(
-            expectedSeigniorage.sub(expectedFundReserve),
+            expectedSeigniorage.sub(expectedFundReserve).sub(expectedStableFundReserve),
             (await bond.totalSupply()).sub(treasuryHoldings)
           );
 
           const expectedBoardroomReserve = expectedSeigniorage
             .sub(expectedFundReserve)
+            .sub(expectedStableFundReserve)
             .sub(expectedTreasuryReserve);
 
           const allocationResult = await treasury.allocateSeigniorage();
@@ -257,6 +308,12 @@ describe('Treasury', () => {
             await expect(new Promise((resolve) => resolve(allocationResult)))
               .to.emit(treasury, 'ContributionPoolFunded')
               .withArgs(await latestBlocktime(provider), expectedFundReserve);
+          }
+
+          if (expectedStableFundReserve.gt(ZERO)) {
+            await expect(new Promise((resolve) => resolve(allocationResult)))
+            .to.emit(treasury, 'StableFundFunded')
+            .withArgs(await latestBlocktime(provider), expectedStableFundReserve);
           }
 
           if (expectedTreasuryReserve.gt(ZERO)) {
@@ -276,12 +333,12 @@ describe('Treasury', () => {
                 expectedBoardroomReserve
               );
           }
+      
 
-          expect(await gold.balanceOf(fund.address)).to.eq(expectedFundReserve);
-          expect(await treasury.getReserve()).to.eq(expectedTreasuryReserve);
-          expect(await gold.balanceOf(boardroom.address)).to.eq(
-            expectedBoardroomReserve
-          );
+                expect(await gold.balanceOf(fund.address)).to.eq(expectedFundReserve);
+                expect(await gold.balanceOf(stablefund.address)).to.eq(expectedStableFundReserve);
+                expect(await treasury.getReserve()).to.eq(expectedTreasuryReserve);
+                expect(await gold.balanceOf(boardroom.address)).to.eq(expectedBoardroomReserve);
         });
 
         it('should funded even fails to call update function in oracle', async () => {
@@ -340,6 +397,23 @@ describe('Treasury', () => {
             await expect(treasury.allocateSeigniorage()).to.revertedWith(
               'Epoch: not allowed'
             );
+          });
+
+          describe('after migration', () => {
+            it('should fail if contract migrated', async () => {
+              for await (const contract of [gold, bond, share]) {
+                await contract
+                  .connect(operator)
+                  .transferOwnership(treasury.address);
+              }
+    
+              await treasury.connect(operator).migrate(operator.address);
+              expect(await treasury.migrated()).to.be.true;
+    
+              await expect(treasury.allocateSeigniorage()).to.revertedWith(
+                'Treasury: migrated'
+              );
+            });
           });
         });
       });
