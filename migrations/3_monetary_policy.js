@@ -11,6 +11,7 @@ const MockDai = artifacts.require('MockDai');
 const MockLinkOracle = artifacts.require('MockLinkOracle');
 
 const Oracle = artifacts.require('Oracle')
+const StableFund = artifacts.require('StableFund')
 const Boardroom = artifacts.require('Boardroom')
 const Treasury = artifacts.require('Treasury')
 const SimpleERCFund = artifacts.require('SimpleERCFund')
@@ -22,6 +23,8 @@ const DAY = 86400;
 
 async function migration(deployer, network, accounts) {
   let uniswap, uniswapRouter;
+
+  console.log(`Network: ${network}`);
   if (['dev'].includes(network)) {
     console.log('Deploying uniswap on dev network.');
     await deployer.deploy(UniswapV2Factory, accounts[0]);
@@ -85,6 +88,8 @@ async function migration(deployer, network, accounts) {
     linkOracle.address
   );
 
+  await deployer.deploy(StableFund, dai.address, gold.address, uniswap.address, uniswapRouter.address, Oracle.address, "90", "105")
+  
   await deployer.deploy(SimpleERCFund);
 
   await deployer.deploy(
@@ -95,6 +100,7 @@ async function migration(deployer, network, accounts) {
     Oracle.address,
     Boardroom.address,
     SimpleERCFund.address,
+    StableFund.address,
     TREASURY_START_DATE
   );
 }
