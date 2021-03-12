@@ -64,6 +64,14 @@ contract StableFund is Ownable, Operator {
         }
     }
 
+    function getXAUTPrice() internal view returns (uint256) {
+        try goldOracle.price0Last() returns (uint256 price) {
+            return price;
+        } catch {
+            revert('StableFund: failed to consult gold price from the oracle');
+        }
+    }
+
     // set to 90% of goldOracle Price
     function goldPriceCeiling() internal view returns(uint256) {
         uint256 tReturn = goldOracle.goldPriceOne().mul(uint256(goldBuyPercentage)).div(100);
@@ -95,13 +103,17 @@ contract StableFund is Ownable, Operator {
             numTokens.mul(goldPriceCeiling()) < IERC20(dai).balanceOf(address(this)),
             'StableFund: Not enough DAI for buy'
         );
-        //console.log("DAI needed: ", numTokens.mul(goldPriceCeiling()));
+        //console.log("XAUT Price: ", getXAUTPrice().div(1e18));
+        //console.log("gold Price: ", goldPrice);
+        //console.log("Price to Pay: ", 
+        //console.log("GoldCeiling: ", goldPriceCeiling());
+        //console.log("DAI needed: ", numTokens.mul(getXAUTPrice()).mul(goldPriceCeiling()).div(100).div(1e18));
         //console.log("DAI Balance: ", IERC20(dai).balanceOf(address(this)));
 
         //Outside my capabilities here lets make sure we test the math...
         bsg.transferFrom(msg.sender, address(this), numTokens);
-        //console.log("Transfering: ", numTokens.mul(goldPriceCeiling()).div(goldOracle.price0Last()));
-        dai.transfer(msg.sender, numTokens.mul(goldPriceCeiling()).div(goldOracle.price0Last()));
+        //console.log("Transfering: ", numTokens.mul(goldOracle.goldPriceOne().div(1e18).mul(90).div(100)));
+        dai.transfer(msg.sender, numTokens.mul(goldOracle.goldPriceOne().div(1e18).mul(90).div(100)));
         
         emit StableFundBoughtBSG(msg.sender, numTokens);
     }
